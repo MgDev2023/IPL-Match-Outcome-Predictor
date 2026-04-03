@@ -50,6 +50,19 @@ def _is_home(team: str, venue: str) -> int:
     return 0
 
 
+def _get_toss_venue_adv(venue: str, toss_venue: dict) -> float:
+    """Partial-match lookup so 'Eden Gardens' matches 'Eden Gardens, Kolkata'."""
+    v = venue.lower()
+    # exact match first
+    if venue in toss_venue:
+        return toss_venue[venue]
+    # partial match
+    for key, val in toss_venue.items():
+        if v in key.lower() or key.lower() in v:
+            return val
+    return 0.5
+
+
 def load_models():
     lr = joblib.load(MODELS_DIR / "logistic_regression.joblib")
     rf = joblib.load(MODELS_DIR / "random_forest.joblib")
@@ -109,7 +122,7 @@ def predict_match(
     if h2h_pct is None:
         h2h_pct = 1 - h2h.get((team2, team1), 0.5)
 
-    tva = toss_venue.get(venue, 0.5)
+    tva = _get_toss_venue_adv(venue, toss_venue)
 
     row = {
         "team1_won_toss": int(toss_winner == team1),

@@ -250,7 +250,8 @@ if predict_btn:
             h2h_pct = 1 - _h2h_reverse
         else:
             h2h_pct = None
-        tva = toss_venue.get(venue, 0.5)
+        from predictor import _get_toss_venue_adv
+        tva = _get_toss_venue_adv(venue, toss_venue)
 
         feat_df = pd.DataFrame({
             "Feature": [
