@@ -114,6 +114,25 @@ def toss_venue_advantage(df: pd.DataFrame) -> pd.Series:
     return pd.Series(records, index=df.index)
 
 
+def team_venue_win_rate(df: pd.DataFrame, team_col: str) -> pd.Series:
+    """Historical win rate for each team at each venue (computed before current match)."""
+    records = []
+    venue_team_history: dict[tuple, list[int]] = {}
+
+    for _, row in df.iterrows():
+        team = row[team_col]
+        venue = row["venue"]
+        key = (team, venue)
+        hist = venue_team_history.get(key, [])
+        pct = sum(hist) / len(hist) if hist else 0.5
+        records.append(pct)
+
+        won = 1 if row["winner"] == team else 0
+        venue_team_history.setdefault(key, []).append(won)
+
+    return pd.Series(records, index=df.index)
+
+
 def build_features(df: pd.DataFrame) -> pd.DataFrame:
     feat = pd.DataFrame(index=df.index)
 
@@ -126,13 +145,22 @@ def build_features(df: pd.DataFrame) -> pd.DataFrame:
     # Toss decision: bat=1, field=0
     feat["toss_bat"] = (df["toss_decision"].str.lower() == "bat").astype(int)
 
+    # Interaction: did TEAM1 specifically bat first / field first?
+    # Much stronger signal than raw toss_bat alone
+    feat["team1_bats_first"]   = ((df["toss_winner"] == df["team1"]) & (df["toss_decision"].str.lower() == "bat")).astype(int)
+    feat["team1_fields_first"] = ((df["toss_winner"] == df["team1"]) & (df["toss_decision"].str.lower() == "field")).astype(int)
+    feat["team2_bats_first"]   = ((df["toss_winner"] == df["team2"]) & (df["toss_decision"].str.lower() == "bat")).astype(int)
+    feat["team2_fields_first"] = ((df["toss_winner"] == df["team2"]) & (df["toss_decision"].str.lower() == "field")).astype(int)
+
     # Home advantage
     feat["team1_home"] = df.apply(lambda r: is_home(r["team1"], r["venue"]), axis=1)
     feat["team2_home"] = df.apply(lambda r: is_home(r["team2"], r["venue"]), axis=1)
 
-    # Rolling form (last 5)
+    # Rolling form (last 5 and last 10)
     feat["team1_form5"] = rolling_win_pct(df, "team1", n=5)
     feat["team2_form5"] = rolling_win_pct(df, "team2", n=5)
+    feat["team1_form10"] = rolling_win_pct(df, "team1", n=10)
+    feat["team2_form10"] = rolling_win_pct(df, "team2", n=10)
     feat["form_diff"] = feat["team1_form5"] - feat["team2_form5"]
 
     # Head-to-head
@@ -141,8 +169,13 @@ def build_features(df: pd.DataFrame) -> pd.DataFrame:
     # Toss × venue historical advantage
     feat["toss_venue_adv"] = toss_venue_advantage(df)
 
-    # Season (year) as ordinal feature
-    feat["season"] = df["season"].astype(str).str[:4].astype(int)
+    # Team-specific venue win rate (strongest new feature)
+    feat["team1_venue_win_rate"] = team_venue_win_rate(df, "team1")
+    feat["team2_venue_win_rate"] = team_venue_win_rate(df, "team2")
+    feat["venue_win_diff"] = feat["team1_venue_win_rate"] - feat["team2_venue_win_rate"]
+
+    # Season — extract starting year correctly (e.g. "2009/10" → 2009, "2024" → 2024)
+    feat["season"] = df["season"].astype(str).str.split("/").str[0].astype(int)
 
     # Keep identifiers for display (not used in model)
     feat["team1"] = df["team1"].values

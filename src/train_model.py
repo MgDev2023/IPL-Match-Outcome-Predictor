@@ -32,13 +32,22 @@ from feature_engineering import run as build_features_run
 FEATURE_COLS = [
     "team1_won_toss",
     "toss_bat",
+    "team1_bats_first",
+    "team1_fields_first",
+    "team2_bats_first",
+    "team2_fields_first",
     "team1_home",
     "team2_home",
     "team1_form5",
     "team2_form5",
+    "team1_form10",
+    "team2_form10",
     "form_diff",
     "h2h_team1_win_pct",
     "toss_venue_adv",
+    "team1_venue_win_rate",
+    "team2_venue_win_rate",
+    "venue_win_diff",
     "season",
 ]
 
