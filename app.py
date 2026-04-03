@@ -37,6 +37,7 @@ TEAMS = sorted([
 ])
 
 VENUES = sorted([
+    # Current / regular IPL venues
     "Wankhede Stadium",
     "MA Chidambaram Stadium, Chepauk",
     "M Chinnaswamy Stadium",
@@ -46,11 +47,40 @@ VENUES = sorted([
     "Sawai Mansingh Stadium",
     "Rajiv Gandhi International Stadium, Uppal",
     "Narendra Modi Stadium, Ahmedabad",
-    "BRSABV Ekana Cricket Stadium",
+    "Bharat Ratna Shri Atal Bihari Vajpayee Ekana Cricket Stadium, Lucknow",
     "Brabourne Stadium",
-    "DY Patil Stadium",
-    "Maharashtra Cricket Association Stadium",
-    "Himachal Pradesh Cricket Association Stadium",
+    "Dr DY Patil Sports Academy, Mumbai",
+    "Maharashtra Cricket Association Stadium, Pune",
+    "Himachal Pradesh Cricket Association Stadium, Dharamsala",
+    "Maharaja Yadavindra Singh International Cricket Stadium, Mullanpur",
+    "Holkar Cricket Stadium",
+    "Saurashtra Cricket Association Stadium",
+    "Barsa Para Cricket Stadium, Guwahati",
+    # Historic / alternate IPL venues
+    "Feroz Shah Kotla",
+    "Subrata Roy Sahara Stadium",
+    "Dr. Y.S. Rajasekhara Reddy ACA-VDCA Cricket Stadium, Visakhapatnam",
+    "Sardar Patel Stadium, Motera",
+    "JSCA International Stadium Complex",
+    "Barabati Stadium",
+    "Green Park",
+    "Vidarbha Cricket Association Stadium, Jamtha",
+    "Nehru Stadium",
+    "Shaheed Veer Narayan Singh International Stadium",
+    # UAE / overseas venues
+    "Dubai International Cricket Stadium",
+    "Sheikh Zayed Stadium",
+    "Sharjah Cricket Stadium",
+    "Zayed Cricket Stadium, Abu Dhabi",
+    # South Africa venues (2009)
+    "Newlands",
+    "Kingsmead",
+    "New Wanderers Stadium",
+    "SuperSport Park",
+    "OUTsurance Oval",
+    "De Beers Diamond Oval",
+    "Buffalo Park",
+    "St George's Park",
 ])
 
 MODELS_READY = (
