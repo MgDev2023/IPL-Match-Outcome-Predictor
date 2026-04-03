@@ -94,8 +94,8 @@ MODELS_READY = (
 def load_resources():
     from predictor import load_models, load_historical_stats
     lr, rf = load_models()
-    team_form, h2h, toss_venue = load_historical_stats()
-    return lr, rf, team_form, h2h, toss_venue
+    team_form, team_form10, h2h, toss_venue, team_venue = load_historical_stats()
+    return lr, rf, team_form, team_form10, h2h, toss_venue, team_venue
 
 
 @st.cache_data(show_spinner=False)
@@ -135,7 +135,7 @@ if not MODELS_READY:
     )
     st.stop()
 
-lr_model, rf_model, team_form, h2h, toss_venue = load_resources()
+lr_model, rf_model, team_form, team_form10, h2h, toss_venue, team_venue = load_resources()
 
 # ── Match setup form ──────────────────────────────────────────────────────────
 st.markdown("### Match Setup")
@@ -157,7 +157,8 @@ with col4:
     toss_winner = st.selectbox("Toss Winner", [team1, team2])
 
 with col5:
-    toss_decision = st.selectbox("Toss Decision", ["bat", "field"])
+    toss_decision_label = st.selectbox("Toss Decision", ["Bat First", "Field First"])
+    toss_decision = "bat" if toss_decision_label == "Bat First" else "field"
 
 with col6:
     season = st.selectbox("Season", list(range(2026, 2007, -1)), index=0)
@@ -176,8 +177,10 @@ if predict_btn:
         lr_model=lr_model,
         rf_model=rf_model,
         team_form=team_form,
+        team_form10=team_form10,
         h2h=h2h,
         toss_venue=toss_venue,
+        team_venue=team_venue,
     )
 
     st.markdown("---")
@@ -289,12 +292,49 @@ with tab1:
         col_b.metric("Seasons", df_feat["season"].nunique() if "season" in df_feat.columns else "—")
         col_c.metric("Venues", df_feat["venue"].nunique())
 
-        st.markdown("**Win % by Toss Decision (team1 wins)**")
-        toss_stats = df_feat.groupby("toss_bat")["target"].mean().reset_index()
-        toss_stats["toss_bat"] = toss_stats["toss_bat"].map({1: "Bat first", 0: "Field first"})
-        toss_stats.columns = ["Toss Decision", "Team1 Win %"]
-        toss_stats["Team1 Win %"] = toss_stats["Team1 Win %"].map(lambda x: f"{x:.1%}")
-        st.dataframe(toss_stats, hide_index=True)
+        df_feat["toss_winner_won"] = (df_feat["team1_won_toss"] == df_feat["target"]).astype(int)
+        toss_agg = df_feat.groupby("toss_bat")["toss_winner_won"].agg(["mean", "count"]).reset_index()
+        toss_agg["toss_bat"] = toss_agg["toss_bat"].map({1: "Chose to Bat", 0: "Chose to Field"})
+
+        field_win  = toss_agg.loc[toss_agg["toss_bat"] == "Chose to Field",  "mean"].values[0]
+        bat_win    = toss_agg.loc[toss_agg["toss_bat"] == "Chose to Bat",    "mean"].values[0]
+        field_cnt  = int(toss_agg.loc[toss_agg["toss_bat"] == "Chose to Field", "count"].values[0])
+        bat_cnt    = int(toss_agg.loc[toss_agg["toss_bat"] == "Chose to Bat",   "count"].values[0])
+        overall    = df_feat["toss_winner_won"].mean()
+
+        st.markdown("**Toss Impact Analysis**")
+        ta, tb, tc = st.columns(3)
+        ta.metric("Overall: toss winner wins", f"{overall:.1%}", help="Across all IPL matches")
+        tb.metric("Win rate — chose to Field", f"{field_win:.1%}", f"{field_cnt} matches",
+                  help="Toss winner elected to field first")
+        tc.metric("Win rate — chose to Bat",   f"{bat_win:.1%}",  f"{bat_cnt} matches",
+                  help="Toss winner elected to bat first")
+
+        st.caption(
+            f"**Key insight:** Captains who win the toss and **choose to field** win "
+            f"**{field_win:.1%}** of the time vs only **{bat_win:.1%}** when batting first — "
+            f"chasing is clearly the preferred IPL strategy."
+        )
+
+        fig_toss = go.Figure(go.Bar(
+            x=["Chose to Field", "Chose to Bat"],
+            y=[field_win * 100, bat_win * 100],
+            text=[f"{field_win:.1%}", f"{bat_win:.1%}"],
+            textposition="outside",
+            marker_color=["#2ecc71", "#e74c3c"],
+            width=0.4,
+        ))
+        fig_toss.add_hline(y=50, line_dash="dash", line_color="gray",
+                           annotation_text="50% baseline", annotation_position="right")
+        fig_toss.update_layout(
+            height=320,
+            yaxis=dict(range=[0, 70], ticksuffix="%", title="Toss Winner Win Rate"),
+            xaxis_title="Toss Decision",
+            margin=dict(l=0, r=0, t=20, b=10),
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+        )
+        st.plotly_chart(fig_toss, use_container_width=True)
 
         st.markdown("**Matches per Season**")
         season_counts = df_feat.groupby("season").size().reset_index(name="Matches")
@@ -303,23 +343,127 @@ with tab1:
         st.info("Run feature engineering first to see dataset stats.")
 
 with tab2:
-    roc_path = Path("models/roc_curve.png")
-    fi_path = Path("models/feature_importance.png")
-    cm_lr_path = Path("models/confusion_logistic_regression.png")
-    cm_rf_path = Path("models/confusion_random_forest.png")
-    if roc_path.exists():
-        st.image(str(roc_path), caption="ROC Curve — Test Set")
-    if fi_path.exists():
-        st.image(str(fi_path), caption="Feature Importance")
-    if cm_lr_path.exists() or cm_rf_path.exists():
+    from sklearn.metrics import roc_curve, roc_auc_score, confusion_matrix
+    import numpy as np
+
+    df_perf = load_feature_data()
+    if df_perf is not None:
+        FEATURE_COLS = [
+            "team1_won_toss","toss_bat",
+            "team1_bats_first","team1_fields_first",
+            "team2_bats_first","team2_fields_first",
+            "team1_home","team2_home",
+            "team1_form5","team2_form5",
+            "team1_form10","team2_form10",
+            "form_diff","h2h_team1_win_pct",
+            "toss_venue_adv",
+            "team1_venue_win_rate","team2_venue_win_rate","venue_win_diff",
+            "season",
+        ]
+        df_perf["date"] = pd.to_datetime(df_perf["date"])
+        split_date = df_perf["date"].quantile(0.8)
+        test_df = df_perf[df_perf["date"] >= split_date].copy()
+        X_te = test_df[FEATURE_COLS].fillna(0.5)
+        y_te = test_df["target"]
+
+        lr_prob  = lr_model.predict_proba(X_te)[:, 1]
+        rf_prob  = rf_model.predict_proba(X_te)[:, 1]
+        ens_prob = (lr_prob + rf_prob) / 2
+
+        lr_auc  = roc_auc_score(y_te, lr_prob)
+        rf_auc  = roc_auc_score(y_te, rf_prob)
+        ens_auc = roc_auc_score(y_te, ens_prob)
+
+        ma, mb, mc = st.columns(3)
+        ma.metric("LR Test AUC",       f"{lr_auc:.3f}")
+        mb.metric("RF Test AUC",       f"{rf_auc:.3f}")
+        mc.metric("Ensemble Test AUC", f"{ens_auc:.3f}")
+
+        # ROC Curve
+        st.markdown("**ROC Curve — Test Set**")
+        fig_roc = go.Figure()
+        fig_roc.add_shape(type="line", x0=0, y0=0, x1=1, y1=1,
+                          line=dict(dash="dash", color="gray"))
+        for name, prob, auc in [
+            ("Logistic Regression", lr_prob,  lr_auc),
+            ("Random Forest",       rf_prob,  rf_auc),
+            ("Ensemble",            ens_prob, ens_auc),
+        ]:
+            fpr, tpr, _ = roc_curve(y_te, prob)
+            fig_roc.add_trace(go.Scatter(x=fpr, y=tpr, mode="lines",
+                                         name=f"{name} (AUC={auc:.3f})"))
+        fig_roc.update_layout(
+            height=380,
+            xaxis_title="False Positive Rate",
+            yaxis_title="True Positive Rate",
+            margin=dict(l=0, r=0, t=10, b=10),
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+        )
+        st.plotly_chart(fig_roc, use_container_width=True)
+
+        # Feature Importance
+        st.markdown("**Feature Importance**")
+        fi_col1, fi_col2 = st.columns(2)
+
+        with fi_col1:
+            st.caption("Logistic Regression Coefficients")
+            lr_clf = lr_model.named_steps["clf"]
+            coef_df = pd.DataFrame({
+                "Feature": FEATURE_COLS,
+                "Coefficient": lr_clf.coef_[0],
+            }).sort_values("Coefficient")
+            fig_lr = go.Figure(go.Bar(
+                x=coef_df["Coefficient"], y=coef_df["Feature"],
+                orientation="h",
+                marker_color=["#d73027" if c < 0 else "#4575b4"
+                              for c in coef_df["Coefficient"]],
+            ))
+            fig_lr.update_layout(height=420, margin=dict(l=0, r=0, t=10, b=10),
+                                 paper_bgcolor="rgba(0,0,0,0)",
+                                 plot_bgcolor="rgba(0,0,0,0)")
+            st.plotly_chart(fig_lr, use_container_width=True)
+
+        with fi_col2:
+            st.caption("Random Forest Importance")
+            rf_clf = rf_model.named_steps["clf"]
+            imp_df = pd.DataFrame({
+                "Feature": FEATURE_COLS,
+                "Importance": rf_clf.feature_importances_,
+            }).sort_values("Importance")
+            fig_rf = go.Figure(go.Bar(
+                x=imp_df["Importance"], y=imp_df["Feature"],
+                orientation="h", marker_color="#4575b4",
+            ))
+            fig_rf.update_layout(height=420, margin=dict(l=0, r=0, t=10, b=10),
+                                 paper_bgcolor="rgba(0,0,0,0)",
+                                 plot_bgcolor="rgba(0,0,0,0)")
+            st.plotly_chart(fig_rf, use_container_width=True)
+
+        # Confusion Matrices
         st.markdown("**Confusion Matrices**")
         cm_col1, cm_col2 = st.columns(2)
-        if cm_lr_path.exists():
-            cm_col1.image(str(cm_lr_path), caption="Logistic Regression")
-        if cm_rf_path.exists():
-            cm_col2.image(str(cm_rf_path), caption="Random Forest")
-    if not roc_path.exists():
-        st.info("Run `python src/train_model.py` to generate evaluation plots.")
+        for col, name, prob in [
+            (cm_col1, "Logistic Regression", lr_prob),
+            (cm_col2, "Random Forest",       rf_prob),
+        ]:
+            cm = confusion_matrix(y_te, (prob >= 0.5).astype(int))
+            fig_cm = go.Figure(go.Heatmap(
+                z=cm, x=["team2 wins", "team1 wins"],
+                y=["team2 wins", "team1 wins"],
+                colorscale="Blues",
+                text=cm, texttemplate="%{text}",
+                showscale=False,
+            ))
+            fig_cm.update_layout(
+                title=name, height=300,
+                margin=dict(l=0, r=0, t=40, b=0),
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+            )
+            col.plotly_chart(fig_cm, use_container_width=True)
+    else:
+        st.info("Run feature engineering first to see model performance.")
 
 with tab3:
     df_feat = load_feature_data()

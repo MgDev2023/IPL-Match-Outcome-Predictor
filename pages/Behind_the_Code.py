@@ -73,8 +73,8 @@ STAT_CARDS = """
     <div class="stat-label">Models + Ensemble</div>
   </div>
   <div class="stat-card">
-    <div class="stat-value">0.66</div>
-    <div class="stat-label">Best Test AUC</div>
+    <div class="stat-value">0.57</div>
+    <div class="stat-label">CV AUC (5-fold)</div>
   </div>
 </div>
 """
@@ -272,12 +272,15 @@ st.markdown(
     """
 | Model | CV AUC (5-fold) | Test AUC |
 |---|---|---|
-| Logistic Regression | ~0.64 | ~0.63 |
-| Random Forest | ~0.66 | ~0.65 |
-| **Ensemble (avg)** | — | **~0.66** |
+| Logistic Regression | ~0.57 | ~0.51 |
+| Random Forest | ~0.57 | ~0.51 |
+| **Ensemble (avg)** | — | **~0.51** |
 
-IPL is inherently stochastic — 66% AUC purely from pre-match signals is competitive
-with published academic benchmarks on similar datasets.
+The low test AUC reflects an honest reality: IPL outcomes are highly stochastic.
+Pre-match features alone (form, H2H, toss, venue history) have limited predictive power —
+the model correctly captures this uncertainty rather than overstating confidence.
+To push beyond ~55% AUC would require ball-by-ball data, player availability, and
+pitch/weather reports — data not available before a match starts.
 """
 )
 
