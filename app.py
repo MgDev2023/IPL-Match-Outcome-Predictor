@@ -94,8 +94,8 @@ MODELS_READY = (
 def load_resources():
     from predictor import load_models, load_historical_stats
     lr, rf = load_models()
-    team_form, team_form10, h2h, toss_venue, team_venue = load_historical_stats()
-    return lr, rf, team_form, team_form10, h2h, toss_venue, team_venue
+    team_form5, team_form10, h2h, toss_venue, team_venue, elo, season_form, streak = load_historical_stats()
+    return lr, rf, team_form5, team_form10, h2h, toss_venue, team_venue, elo, season_form, streak
 
 
 @st.cache_data(show_spinner=False)
@@ -135,7 +135,7 @@ if not MODELS_READY:
     )
     st.stop()
 
-lr_model, rf_model, team_form, team_form10, h2h, toss_venue, team_venue = load_resources()
+lr_model, rf_model, team_form, team_form10, h2h, toss_venue, team_venue, elo, season_form, streak = load_resources()
 
 # ── Match setup form ──────────────────────────────────────────────────────────
 st.markdown("### Match Setup")
@@ -163,6 +163,11 @@ with col5:
 with col6:
     season = st.selectbox("Season", list(range(2026, 2007, -1)), index=0)
 
+col7, _ = st.columns([1, 2])
+with col7:
+    match_type_label = st.selectbox("Match Type", ["League Match", "Playoff / Knockout"])
+    is_playoff = 1 if match_type_label == "Playoff / Knockout" else 0
+
 predict_btn = st.button("🔮 Predict Outcome", type="primary", use_container_width=True)
 
 # ── Prediction ────────────────────────────────────────────────────────────────
@@ -174,6 +179,7 @@ if predict_btn:
         toss_winner=toss_winner,
         toss_decision=toss_decision,
         season=season,
+        is_playoff=is_playoff,
         lr_model=lr_model,
         rf_model=rf_model,
         team_form=team_form,
@@ -181,6 +187,9 @@ if predict_btn:
         h2h=h2h,
         toss_venue=toss_venue,
         team_venue=team_venue,
+        elo=elo,
+        season_form=season_form,
+        streak=streak,
     )
 
     st.markdown("---")
@@ -235,7 +244,7 @@ if predict_btn:
         st.metric("Logistic Regression", f"{result['lr_prob_team1']:.1%}",
                   help=f"{team1} win probability from LR")
     with col_rf:
-        st.metric("Random Forest", f"{result['rf_prob_team1']:.1%}",
+        st.metric("XGBoost", f"{result['rf_prob_team1']:.1%}",
                   help=f"{team1} win probability from RF")
     with col_ens:
         st.metric("Ensemble (avg)", f"{result['ensemble_prob_team1']:.1%}",
@@ -358,7 +367,10 @@ with tab2:
             "form_diff","h2h_team1_win_pct",
             "toss_venue_adv",
             "team1_venue_win_rate","team2_venue_win_rate","venue_win_diff",
-            "season",
+            "team1_elo","team2_elo","elo_diff",
+            "team1_season_form","team2_season_form",
+            "team1_streak","team2_streak",
+            "is_playoff","season",
         ]
         df_perf["date"] = pd.to_datetime(df_perf["date"])
         split_date = df_perf["date"].quantile(0.8)
@@ -386,7 +398,7 @@ with tab2:
                           line=dict(dash="dash", color="gray"))
         for name, prob, auc in [
             ("Logistic Regression", lr_prob,  lr_auc),
-            ("Random Forest",       rf_prob,  rf_auc),
+            ("XGBoost",       rf_prob,  rf_auc),
             ("Ensemble",            ens_prob, ens_auc),
         ]:
             fpr, tpr, _ = roc_curve(y_te, prob)
@@ -425,7 +437,7 @@ with tab2:
             st.plotly_chart(fig_lr, use_container_width=True)
 
         with fi_col2:
-            st.caption("Random Forest Importance")
+            st.caption("XGBoost Importance")
             rf_clf = rf_model.named_steps["clf"]
             imp_df = pd.DataFrame({
                 "Feature": FEATURE_COLS,
@@ -445,7 +457,7 @@ with tab2:
         cm_col1, cm_col2 = st.columns(2)
         for col, name, prob in [
             (cm_col1, "Logistic Regression", lr_prob),
-            (cm_col2, "Random Forest",       rf_prob),
+            (cm_col2, "XGBoost",       rf_prob),
         ]:
             cm = confusion_matrix(y_te, (prob >= 0.5).astype(int))
             fig_cm = go.Figure(go.Heatmap(

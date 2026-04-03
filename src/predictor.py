@@ -27,6 +27,14 @@ FEATURE_COLS = [
     "team1_venue_win_rate",
     "team2_venue_win_rate",
     "venue_win_diff",
+    "team1_elo",
+    "team2_elo",
+    "elo_diff",
+    "team1_season_form",
+    "team2_season_form",
+    "team1_streak",
+    "team2_streak",
+    "is_playoff",
     "season",
 ]
 
@@ -124,7 +132,26 @@ def load_historical_stats():
         for _, row in df.iterrows():
             team_venue[(row[col], row["venue"])] = row[rate_col]
 
-    return team_form5, team_form10, h2h, toss_venue, team_venue
+    # Latest ELO per team
+    elo = {}
+    for col, elo_col in [("team1", "team1_elo"), ("team2", "team2_elo")]:
+        elo.update(df.groupby(col)[elo_col].last().to_dict())
+
+    # Latest season form per team
+    season_form = {}
+    for col, sf_col in [("team1", "team1_season_form"), ("team2", "team2_season_form")]:
+        d = df.groupby(col)[sf_col].last().to_dict()
+        for k, v in d.items():
+            season_form[k] = (season_form[k] + v) / 2 if k in season_form else v
+
+    # Latest win streak per team
+    streak = {}
+    for col, st_col in [("team1", "team1_streak"), ("team2", "team2_streak")]:
+        d = df.groupby(col)[st_col].last().to_dict()
+        for k, v in d.items():
+            streak[k] = max(streak.get(k, 0), v)
+
+    return team_form5, team_form10, h2h, toss_venue, team_venue, elo, season_form, streak
 
 
 def _get_venue_win_rate(team: str, venue: str, team_venue: dict) -> float:
@@ -145,6 +172,7 @@ def predict_match(
     toss_winner: str,
     toss_decision: str,
     season: int,
+    is_playoff: int,
     lr_model,
     rf_model,
     team_form: dict,
@@ -152,9 +180,12 @@ def predict_match(
     h2h: dict,
     toss_venue: dict,
     team_venue: dict,
+    elo: dict,
+    season_form: dict,
+    streak: dict,
 ) -> dict:
-    t1_form  = team_form.get(team1, 0.5)
-    t2_form  = team_form.get(team2, 0.5)
+    t1_form   = team_form.get(team1, 0.5)
+    t2_form   = team_form.get(team2, 0.5)
     t1_form10 = team_form10.get(team1, 0.5)
     t2_form10 = team_form10.get(team2, 0.5)
 
@@ -166,31 +197,46 @@ def predict_match(
     t1vr = _get_venue_win_rate(team1, venue, team_venue)
     t2vr = _get_venue_win_rate(team2, venue, team_venue)
 
+    t1_elo = elo.get(team1, 1500.0)
+    t2_elo = elo.get(team2, 1500.0)
+    t1_sf  = season_form.get(team1, 0.5)
+    t2_sf  = season_form.get(team2, 0.5)
+    t1_str = streak.get(team1, 0)
+    t2_str = streak.get(team2, 0)
+
     t1_toss = int(toss_winner == team1)
     t2_toss = int(toss_winner == team2)
     is_bat  = int(toss_decision.lower() == "bat")
     is_fld  = 1 - is_bat
 
     row = {
-        "team1_won_toss":      t1_toss,
-        "toss_bat":            is_bat,
-        "team1_bats_first":    t1_toss * is_bat,
-        "team1_fields_first":  t1_toss * is_fld,
-        "team2_bats_first":    t2_toss * is_bat,
-        "team2_fields_first":  t2_toss * is_fld,
-        "team1_home":          _is_home(team1, venue),
-        "team2_home":          _is_home(team2, venue),
-        "team1_form5":         t1_form,
-        "team2_form5":         t2_form,
-        "team1_form10":        t1_form10,
-        "team2_form10":        t2_form10,
-        "form_diff":           t1_form - t2_form,
-        "h2h_team1_win_pct":   h2h_pct,
-        "toss_venue_adv":      tva,
+        "team1_won_toss":       t1_toss,
+        "toss_bat":             is_bat,
+        "team1_bats_first":     t1_toss * is_bat,
+        "team1_fields_first":   t1_toss * is_fld,
+        "team2_bats_first":     t2_toss * is_bat,
+        "team2_fields_first":   t2_toss * is_fld,
+        "team1_home":           _is_home(team1, venue),
+        "team2_home":           _is_home(team2, venue),
+        "team1_form5":          t1_form,
+        "team2_form5":          t2_form,
+        "team1_form10":         t1_form10,
+        "team2_form10":         t2_form10,
+        "form_diff":            t1_form - t2_form,
+        "h2h_team1_win_pct":    h2h_pct,
+        "toss_venue_adv":       tva,
         "team1_venue_win_rate": t1vr,
         "team2_venue_win_rate": t2vr,
-        "venue_win_diff":      t1vr - t2vr,
-        "season":              season,
+        "venue_win_diff":       t1vr - t2vr,
+        "team1_elo":            t1_elo,
+        "team2_elo":            t2_elo,
+        "elo_diff":             t1_elo - t2_elo,
+        "team1_season_form":    t1_sf,
+        "team2_season_form":    t2_sf,
+        "team1_streak":         t1_str,
+        "team2_streak":         t2_str,
+        "is_playoff":           is_playoff,
+        "season":               season,
     }
 
     X = pd.DataFrame([row])[FEATURE_COLS]

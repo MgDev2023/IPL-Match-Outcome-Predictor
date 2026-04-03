@@ -114,6 +114,66 @@ def toss_venue_advantage(df: pd.DataFrame) -> pd.Series:
     return pd.Series(records, index=df.index)
 
 
+def elo_ratings(df: pd.DataFrame, k: int = 32, base: float = 1500.0) -> tuple:
+    """Compute ELO rating for team1 and team2 before each match."""
+    ratings: dict[str, float] = {}
+    t1_elo, t2_elo = [], []
+
+    for _, row in df.iterrows():
+        t1, t2 = row["team1"], row["team2"]
+        r1 = ratings.get(t1, base)
+        r2 = ratings.get(t2, base)
+        t1_elo.append(r1)
+        t2_elo.append(r2)
+
+        # Expected win probability
+        exp1 = 1 / (1 + 10 ** ((r2 - r1) / 400))
+        actual1 = 1.0 if row["winner"] == t1 else 0.0
+
+        ratings[t1] = r1 + k * (actual1 - exp1)
+        ratings[t2] = r2 + k * ((1 - actual1) - (1 - exp1))
+
+    return (
+        pd.Series(t1_elo, index=df.index),
+        pd.Series(t2_elo, index=df.index),
+    )
+
+
+def season_win_rate(df: pd.DataFrame, team_col: str) -> pd.Series:
+    """Win rate within the current season only (before current match)."""
+    records = []
+    season_history: dict[tuple, list[int]] = {}
+
+    for _, row in df.iterrows():
+        team = row[team_col]
+        season = row["season"]
+        key = (team, season)
+        hist = season_history.get(key, [])
+        pct = sum(hist) / len(hist) if hist else 0.5
+        records.append(pct)
+
+        won = 1 if row["winner"] == team else 0
+        season_history.setdefault(key, []).append(won)
+
+    return pd.Series(records, index=df.index)
+
+
+def win_streak(df: pd.DataFrame, team_col: str) -> pd.Series:
+    """Current consecutive win streak before this match (capped at 10)."""
+    records = []
+    streaks: dict[str, int] = {}
+
+    for _, row in df.iterrows():
+        team = row[team_col]
+        records.append(min(streaks.get(team, 0), 10))
+        if row["winner"] == team:
+            streaks[team] = streaks.get(team, 0) + 1
+        else:
+            streaks[team] = 0
+
+    return pd.Series(records, index=df.index)
+
+
 def team_venue_win_rate(df: pd.DataFrame, team_col: str) -> pd.Series:
     """Historical win rate for each team at each venue (computed before current match)."""
     records = []
@@ -173,6 +233,23 @@ def build_features(df: pd.DataFrame) -> pd.DataFrame:
     feat["team1_venue_win_rate"] = team_venue_win_rate(df, "team1")
     feat["team2_venue_win_rate"] = team_venue_win_rate(df, "team2")
     feat["venue_win_diff"] = feat["team1_venue_win_rate"] - feat["team2_venue_win_rate"]
+
+    # ELO ratings (best single predictor)
+    feat["team1_elo"], feat["team2_elo"] = elo_ratings(df)
+    feat["elo_diff"] = feat["team1_elo"] - feat["team2_elo"]
+
+    # Season win rate (current season form only)
+    feat["team1_season_form"] = season_win_rate(df, "team1")
+    feat["team2_season_form"] = season_win_rate(df, "team2")
+
+    # Consecutive win streak
+    feat["team1_streak"] = win_streak(df, "team1")
+    feat["team2_streak"] = win_streak(df, "team2")
+
+    # Is this a playoff match?
+    playoff_types = {"Final", "Qualifier 1", "Qualifier 2", "Eliminator",
+                     "Semi Final", "Elimination Final", "3rd Place Play-Off"}
+    feat["is_playoff"] = df["match_type"].isin(playoff_types).astype(int)
 
     # Season — extract starting year correctly (e.g. "2009/10" → 2009, "2024" → 2024)
     feat["season"] = df["season"].astype(str).str.split("/").str[0].astype(int)

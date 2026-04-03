@@ -12,7 +12,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
-from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import (
     ConfusionMatrixDisplay,
@@ -23,6 +22,7 @@ from sklearn.metrics import (
 from sklearn.model_selection import StratifiedKFold, cross_val_score
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
+from xgboost import XGBClassifier
 
 warnings.filterwarnings("ignore")
 
@@ -48,6 +48,14 @@ FEATURE_COLS = [
     "team1_venue_win_rate",
     "team2_venue_win_rate",
     "venue_win_diff",
+    "team1_elo",
+    "team2_elo",
+    "elo_diff",
+    "team1_season_form",
+    "team2_season_form",
+    "team1_streak",
+    "team2_streak",
+    "is_playoff",
     "season",
 ]
 
@@ -144,10 +152,14 @@ def run():
 
     rf_pipeline = Pipeline([
         ("scaler", StandardScaler()),
-        ("clf", RandomForestClassifier(
+        ("clf", XGBClassifier(
             n_estimators=300,
-            max_depth=6,
-            min_samples_leaf=10,
+            max_depth=4,
+            learning_rate=0.05,
+            subsample=0.8,
+            colsample_bytree=0.8,
+            min_child_weight=10,
+            eval_metric="logloss",
             random_state=42,
             n_jobs=-1,
         )),
