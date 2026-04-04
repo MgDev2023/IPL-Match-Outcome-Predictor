@@ -244,7 +244,7 @@ if predict_btn:
         st.metric("Logistic Regression", f"{result['lr_prob_team1']:.1%}",
                   help=f"{team1} win probability from LR")
     with col_rf:
-        st.metric("XGBoost", f"{result['rf_prob_team1']:.1%}",
+        st.metric("Random Forest", f"{result['rf_prob_team1']:.1%}",
                   help=f"{team1} win probability from RF")
     with col_ens:
         st.metric("Ensemble (avg)", f"{result['ensemble_prob_team1']:.1%}",
@@ -398,7 +398,7 @@ with tab2:
                           line=dict(dash="dash", color="gray"))
         for name, prob, auc in [
             ("Logistic Regression", lr_prob,  lr_auc),
-            ("XGBoost",       rf_prob,  rf_auc),
+            ("Random Forest",       rf_prob,  rf_auc),
             ("Ensemble",            ens_prob, ens_auc),
         ]:
             fpr, tpr, _ = roc_curve(y_te, prob)
@@ -437,7 +437,7 @@ with tab2:
             st.plotly_chart(fig_lr, use_container_width=True)
 
         with fi_col2:
-            st.caption("XGBoost Importance")
+            st.caption("Random Forest Importance")
             rf_clf = rf_model.named_steps["clf"]
             imp_df = pd.DataFrame({
                 "Feature": FEATURE_COLS,
@@ -457,7 +457,7 @@ with tab2:
         cm_col1, cm_col2 = st.columns(2)
         for col, name, prob in [
             (cm_col1, "Logistic Regression", lr_prob),
-            (cm_col2, "XGBoost",       rf_prob),
+            (cm_col2, "Random Forest",       rf_prob),
         ]:
             cm = confusion_matrix(y_te, (prob >= 0.5).astype(int))
             fig_cm = go.Figure(go.Heatmap(

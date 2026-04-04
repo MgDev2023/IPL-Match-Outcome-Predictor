@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import (
     ConfusionMatrixDisplay,
@@ -22,7 +23,6 @@ from sklearn.metrics import (
 from sklearn.model_selection import StratifiedKFold, cross_val_score
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
-from xgboost import XGBClassifier
 
 warnings.filterwarnings("ignore")
 
@@ -152,14 +152,10 @@ def run():
 
     rf_pipeline = Pipeline([
         ("scaler", StandardScaler()),
-        ("clf", XGBClassifier(
+        ("clf", RandomForestClassifier(
             n_estimators=300,
-            max_depth=4,
-            learning_rate=0.05,
-            subsample=0.8,
-            colsample_bytree=0.8,
-            min_child_weight=10,
-            eval_metric="logloss",
+            max_depth=6,
+            min_samples_leaf=10,
             random_state=42,
             n_jobs=-1,
         )),
