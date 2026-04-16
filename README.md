@@ -1,99 +1,85 @@
----
-title: IPL Match Outcome Predictor
-emoji: 🏏
-colorFrom: blue
-colorTo: indigo
-sdk: streamlit
-sdk_version: 1.35.0
-app_file: app.py
-pinned: false
----
-
 # IPL Match Outcome Predictor
 
-Pre-match win probability for any IPL fixture — before the first ball is bowled.
-
-## Tech Stack
-Python 3.10 | Pandas | Scikit-learn | Logistic Regression + Random Forest | Plotly | Streamlit | Joblib
+A web app that predicts which team is more likely to win an IPL match — before the match even starts.
 
 ---
 
-## Quick Start
+## What does it do?
 
-### 1. Install dependencies
+You pick two teams, a venue, and the toss result. The app shows you the win probability for each team based on past IPL data.
+
+---
+
+## How it works
+
+I used historical IPL match data (2008–2024) to build a machine learning model. The model looks at:
+- How each team has been performing recently (last 5 matches)
+- Head-to-head record between the two teams
+- Whether the toss winner has an advantage at that venue
+- Home ground advantage
+
+Two models are trained — Logistic Regression and Random Forest — and their predictions are averaged.
+
+---
+
+## Tech used
+
+- Python
+- Scikit-learn (machine learning)
+- Pandas (data processing)
+- Streamlit (web app)
+- Plotly (charts)
+
+---
+
+## How to run it locally
+
+**Step 1 — Install dependencies**
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. Get the dataset
-- Go to Kaggle and search **"IPL Complete Dataset 2008-2024"**
-- Download `matches.csv` and place it at `data/raw/matches.csv`
+**Step 2 — Get the dataset**
+- Download `matches.csv` from Kaggle (search "IPL Complete Dataset 2008-2024")
+- Place it at `data/raw/matches.csv`
 
-### 3. Build features + train models
+**Step 3 — Build features and train**
 ```bash
 python setup_and_train.py
 ```
 
-### 4. Launch the app
+**Step 4 — Run the app**
 ```bash
 streamlit run app.py
 ```
 
 ---
 
-## Project Structure
+## Model accuracy
+
+~66% AUC. IPL is unpredictable by nature, so this is actually decent for pre-match prediction.
+
+---
+
+## Project structure
 
 ```
-IPL-MATCH-OUTCOME-PREDICTOR/
+IPL-Match-Outcome-Predictor/
 ├── data/
-│   ├── raw/            ← place matches.csv here
-│   └── processed/      ← auto-generated features.csv
-├── models/             ← saved models + evaluation plots
+│   ├── raw/            ← put matches.csv here
+│   └── processed/      ← auto-generated
+├── models/             ← saved models
 ├── src/
-│   ├── feature_engineering.py   ← builds features from raw CSV
-│   ├── train_model.py           ← trains LR + RF, saves models
-│   └── predictor.py             ← prediction helper (used by app)
-├── app.py              ← Streamlit UI
-├── setup_and_train.py  ← one-shot setup script
+│   ├── feature_engineering.py
+│   ├── train_model.py
+│   └── predictor.py
+├── app.py
+├── setup_and_train.py
 └── requirements.txt
 ```
 
 ---
 
-## Features Engineered
+## Made by
 
-| Feature | Description |
-|---|---|
-| `team1_form5` | Win % over last 5 matches |
-| `team2_form5` | Win % over last 5 matches |
-| `form_diff` | team1_form5 − team2_form5 |
-| `h2h_team1_win_pct` | Historical head-to-head win % |
-| `team1_won_toss` | Did team1 win the toss? |
-| `toss_bat` | Did toss winner choose to bat? |
-| `team1_home` | Is team1 playing at home ground? |
-| `team2_home` | Is team2 playing at home ground? |
-| `toss_venue_adv` | Historical toss-winner win % at this venue |
-| `season` | Season year (trend feature) |
-
-All rolling stats are computed **before** each match to avoid data leakage.
-
----
-
-## Model Performance (typical)
-
-| Model | CV AUC | Test AUC |
-|---|---|---|
-| Logistic Regression | ~0.64 | ~0.63 |
-| Random Forest | ~0.66 | ~0.65 |
-| Ensemble (avg) | — | **~0.66** |
-
-IPL is inherently hard to predict — 66% AUC on pre-match features is solid.
-
----
-
-## App Features
-
-- **Prediction tab**: select teams, venue, toss → get probability bar + model breakdown
-- **Dataset Overview**: match counts, toss stats, season distribution
-- **Model Performance**: ROC curve + feature importance plots
-- **Head-to-Head**: historical win record between any two teams
+Megan — fresher portfolio project to practice machine learning and sports data analysis.
